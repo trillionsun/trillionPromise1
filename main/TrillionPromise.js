@@ -1,15 +1,16 @@
-class TrillionPromise {
-    STATE = {
-        PENDING: 'pending',
-        FULFILLED: 'fulfilled',
-        REJECTED: 'rejected'
-    }
+const STATE = {
+    PENDING: 'pending',
+    FULFILLED: 'fulfilled',
+    REJECTED: 'rejected'
+}
 
-    state = this.STATE.PENDING;
+class TrillionPromise {
+
+    state = STATE.PENDING;
     value;
     reason;
 
-    static setState(state) {
+    setState(state) {
         if (this.state !== STATE.PENDING) {
             throw new Error('state of this promise cannot be updated!');
         }
@@ -35,12 +36,13 @@ class TrillionPromise {
         this.reason = reason;
     }
 
-    static then(onFulfilled, onRejected) {
-        if (this.state === STATE.FULFILLED && typeof onFulfilled === Function) {
+    then(onFulfilled, onRejected) {
+        if (this.state === STATE.FULFILLED && typeof onFulfilled === 'function' ) {
             onFulfilled(this.value);
+            return;
             // return a promise?
         }
-        if (this.state === STATE.REJECTED && typeof onRejected === Function) {
+        if (this.state === STATE.REJECTED && typeof onRejected === 'function') {
             onRejected(this.value);
             // return a promise?
         }
@@ -48,13 +50,28 @@ class TrillionPromise {
 
     constructor(handler) {
         try {
-            handler(resolve, reject);
+            //Q1: bind the resolve and reject to instance otherwise it will be undefined
+            this.resolve = this.resolve.bind(this);
+            this.reject = this.reject.bind(this);
+            handler(this.resolve, this.reject);
         } catch (err) {
-            reject(err);
+            this.reject(err);
         }
     }
 
-
 }
 
-module.exports = { TrillionPromise };
+// testing code
+const p1 = new TrillionPromise((resolve, reject) => {
+    resolve('resolved!');
+});
+// const p2 = new TrillionPromise((resolve, reject) => {
+//     reject('rejected!')
+// })
+p1.then((res) => {
+    console.log(res);
+}, (err) => {
+    console.log(err);
+});
+
+module.exports = {TrillionPromise, STATE};
