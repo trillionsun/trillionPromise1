@@ -5,7 +5,6 @@ const STATE = {
 }
 
 class TrillionPromise {
-
     state = STATE.PENDING;
     value;
     reason;
@@ -33,7 +32,7 @@ class TrillionPromise {
 
     reject(reason) {
         this.setState(STATE.REJECTED);
-        this.reason = reason;
+        this.value = reason;
     }
 
     then(onFulfilled, onRejected) {
@@ -61,14 +60,20 @@ class TrillionPromise {
 
 }
 
-// testing code
-const p1 = new TrillionPromise((resolve, reject) => {
+const p1 = new TrillionPromise((resolve) => {
     resolve('resolved!');
 });
-// const p2 = new TrillionPromise((resolve, reject) => {
-//     reject('rejected!')
-// })
 p1.then((res) => {
+    console.log(res);
+}, (err) => {
+    console.log(err);
+});
+
+const p2 = new TrillionPromise((resolve, reject) => {
+    reject('rejected!')
+})
+
+p2.then((res) => {
     console.log(res);
 }, (err) => {
     console.log(err);
