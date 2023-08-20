@@ -7,9 +7,8 @@ const STATE = {
 class TrillionPromise {
     state = STATE.PENDING;
     value;
-    reason;
-    onResolves = [];
-    onRejects = [];
+    onResolveCallBacks = [];
+    onRejectCallBacks = [];
 
     setState(state) {
         if (this.state !== STATE.PENDING) {
@@ -27,116 +26,117 @@ class TrillionPromise {
         }
     }
 
-    resolve(value) {
+    onResolve(value) {
         this.setState(STATE.FULFILLED);
         this.value = value;
-        this.onResolves.forEach(fn => fn(value));
+        if (this.onResolveCallBacks && this.onResolveCallBacks.length) {
+            this.onResolveCallBacks.forEach(fn=> fn(value));
+        }
     }
 
-    reject(reason) {
+    onReject(reason) {
         this.setState(STATE.REJECTED);
         this.value = reason;
-        this.onRejects.forEach(fn => fn(reason));
+        if (this.onRejectCallBacks && this.onRejectCallBacks.length) {
+            this.onRejectCallBacks.forEach(fn=> fn(reason));
+        }
     }
 
-    then(onFulfilled, onRejected) {
+    then(onResolved, onRejected) {
         return new TrillionPromise((resolve, reject) => {
-            const resolvedFromLastPromise = onFulfilled(this.value);
+
             if (this.state === STATE.FULFILLED) {
-                if (typeof onFulfilled === 'function') {
+                try {
+                    const resolvedFromLastPromise = onResolved(this.value);
+                    if (resolvedFromLastPromise instanceof TrillionPromise) {
+                        resolvedFromLastPromise.then(res => resolve(res));
+                        return;
+                    }
+                    resolve(resolvedFromLastPromise);
+                } catch (e) {
+                    reject(e);
+                }
+                return;
+            }
+            if (this.state === STATE.REJECTED) {
+                try {
+                    const rejectedFromLastPromise = onRejected(this.value);
+                    if (rejectedFromLastPromise instanceof TrillionPromise) {
+                        rejectedFromLastPromise.then(null, rej => reject(rej));
+                        return;
+                    }
+                    reject(this.value);
+                } catch (e) {
+                    reject(e);
+                }
+                return;
+            }
+            if (this.state === STATE.PENDING) {
+                registerCallBack(() => {
                     try {
-                        const fulfilledFromLastPromise = resolvedFromLastPromise;
-                        if (fulfilledFromLastPromise instanceof TrillionPromise) {
-                            fulfilledFromLastPromise.then(res => resolve(res));
-                            return;
+                        const resolvedFromLastPromise = onResolved(this.value);
+                        if (resolvedFromLastPromise instanceof TrillionPromise) {
+                            resolvedFromLastPromise.then(resolve, reject);
+                        } else {
+                            resolve(resolvedFromLastPromise);
                         }
-                        resolve(fulfilledFromLastPromise);
                     } catch (e) {
                         reject(e);
                     }
-                    return;
-                }
-                resolve(this.value);
-            }
-            if (this.state === STATE.REJECTED) {
-                if (typeof onRejected === 'function') {
+                }, this.onResolveCallBacks);
+                registerCallBack(() => {
                     try {
                         const rejectedFromLastPromise = onRejected(this.value);
                         if (rejectedFromLastPromise instanceof TrillionPromise) {
-                            rejectedFromLastPromise.then(null, rej => reject(rej));
-                            return;
+                            rejectedFromLastPromise.then(resolve, reject);
+                        } else {
+                            reject(rejectedFromLastPromise);
                         }
-                        reject(this.value);
                     } catch (e) {
                         reject(e);
                     }
-                    return;
-                }
-                reject(this.value);
-            }
-            if (this.state === STATE.PENDING) {
-                addToMicroTaskQueue(this.onResolves, (value)=> {
-                    try{
-                    if(resolvedFromLastPromise instanceof TrillionPromise){
-                        resolvedFromLastPromise.then(a=> resolve(a));
-                    }else{
-                        resolve(resolvedFromLastPromise);
-                    }}catch (e){
-                        reject(e);
-                    }
-                })
-                addToMicroTaskQueue(this.onResolves, onFulfilled);
-                addToMicroTaskQueue(this.onRejects, onRejected);
+                }, this.onRejectCallBacks);
             }
         });
     }
 
     constructor(handler) {
-        try {
-            //Q1: bind the resolve and reject to instance otherwise it will be undefined
-            this.resolve = this.resolve.bind(this);
-            this.reject = this.reject.bind(this);
-            handler(this.resolve, this.reject);
-        } catch (err) {
-            this.reject(err);
-        }
+        this.onResolve = this.onResolve.bind(this);
+        this.onReject = this.onReject.bind(this);
+        handler(this.onResolve, this.onReject);
+    }
+
+    static resolve(value) {
+        return new TrillionPromise(resolve => resolve(value));
+    }
+
+    static reject(value) {
+        return new TrillionPromise((_, reject) => reject(value));
     }
 
 }
 
-function addToMicroTaskQueue(tasks, taskToAdd) {
-    setTimeout(() => tasks.push(taskToAdd));
+function registerCallBack(taskToExecute, callbacks) {
+    setTimeout(() => {
+        callbacks.push(taskToExecute);
+    }, 0);
 }
 
-
-// const p1 = new TrillionPromise((resolve) => {
-//     resolve('resolved!');
-// });
-// p1.then((res) => {
-//     console.log(res);
-// }, (err) => {
-//     console.log(err);
-// });
-//
-// const p2 = new TrillionPromise((resolve, reject) => {
-//     reject('rejected!')
-// })
-//
-// p2.then((res) => {
-//     console.log(res);
-// }, (err) => {
-//     console.log(err);
-// });
-
-const asyncP1 = new TrillionPromise((resolve) =>
-    setTimeout(() => resolve('resolve at: ' + currentTime()), 5000));
-
-const currentTime = ()=> new Date().getSeconds();
-console.log('current time is ' + currentTime());
-asyncP1.then((res) => {
-    console.log(res);
-}, (err) => {
-    console.log('error: '+ err);
-}).then(res => setTimeout(() => console.log('what about another second', +currentTime() + ' with value: ' + res), 1000));
-
 module.exports = {TrillionPromise, STATE};
+
+function getCurrentSecond() {
+    return new Date().getSeconds();
+}
+
+const promise = new TrillionPromise((resolve, reject) => {
+    setTimeout(()=> reject('should reject after 2s'), 2000);
+});
+
+const currentSecond = getCurrentSecond();
+console.log('current second is :' + getCurrentSecond());
+promise.then(()=> null, reason=> {
+    const rejectedReason = reason;
+    console.log('rejected second is :' + getCurrentSecond());
+} );
+
+
